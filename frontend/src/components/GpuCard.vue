@@ -43,7 +43,7 @@ function barColor(pct: number) {
         <div>
           <h2 class="text-sm font-bold tracking-wide text-slate-100">{{ gpu.name }}</h2>
           <p class="font-mono text-[11px] text-slate-500">
-            core {{ fmt(gpu.coreClockMhz) }} MHz · mem {{ fmt(gpu.memClockMhz) }} MHz
+            <span v-if="gpu.memTempC != null">vram {{ fmt(gpu.memTempC) }}°C · </span>core {{ fmt(gpu.coreClockMhz) }} MHz · mem {{ fmt(gpu.memClockMhz) }} MHz
             <span v-if="gpu.fanSpeedPct != null"> · fan {{ fmt(gpu.fanSpeedPct) }}%</span>
           </p>
         </div>

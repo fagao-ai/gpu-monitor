@@ -1,6 +1,7 @@
 use nvml_wrapper::enum_wrappers::device::{Clock, TemperatureSensor, TemperatureThreshold};
-use nvml_wrapper::enums::device::UsedGpuMemory;
+use nvml_wrapper::enums::device::{SampleValue, UsedGpuMemory};
 use nvml_wrapper::error::NvmlError;
+use nvml_wrapper::structs::device::FieldId;
 use nvml_wrapper::Nvml;
 use serde::Serialize;
 
@@ -18,6 +19,7 @@ pub struct GpuInfo {
     pub index: u32,
     pub name: String,
     pub temp_c: Option<i32>,
+    pub mem_temp_c: Option<i32>,
     pub shutdown_temp_c: Option<i32>,
     pub util_gpu: Option<u32>,
     pub util_mem: Option<u32>,
@@ -95,8 +97,7 @@ pub fn sample(nvml: &Nvml, errors: &mut u64) -> Vec<GpuInfo> {
             index: i,
             name,
             temp_c: get(dev.temperature(TemperatureSensor::Gpu)).map(|t| t as i32),
-            // NOTE: HBM temperature needs NVML field values; nvml-wrapper 0.10
-            // does not expose it. Skipped for now (CMP cards lack it anyway).
+            mem_temp_c: memory_temp_c(&dev),
             shutdown_temp_c: get(dev.temperature_threshold(TemperatureThreshold::Shutdown))
                 .map(|t| t as i32),
             util_gpu: util.map(|u| u.0),
@@ -134,6 +135,7 @@ mod tests {
                 index: 0,
                 name: "test".into(),
                 temp_c: Some(42),
+                mem_temp_c: Some(45),
                 shutdown_temp_c: Some(98),
                 util_gpu: Some(10),
                 util_mem: Some(20),
@@ -170,4 +172,35 @@ mod tests {
         }
         assert!(json.contains("\"fanSpeedPct\":null"));
     }
+}
+
+/// HBM/GDDR temperature via the NVML field-value API (field 82, U32).
+/// Not all cards expose this; failures degrade to None without counting.
+fn memory_temp_c(dev: &nvml_wrapper::Device) -> Option<i32> {
+    const NVML_FI_DEV_MEMORY_TEMP: u32 = 82;
+    let samples = match dev.field_values_for(&[FieldId(NVML_FI_DEV_MEMORY_TEMP)]) {
+        Ok(s) => s,
+        Err(e) => {
+            tracing::warn!("field_values_for(MEMORY_TEMP) outer error: {e:?}");
+            return None;
+        }
+    };
+    if let Some(inner) = samples.first() {
+        if inner.is_err() {
+            tracing::warn!(
+                "field_values_for(MEMORY_TEMP) inner error: {:?}",
+                inner.as_ref().err().unwrap()
+            );
+        }
+    }
+    samples
+        .into_iter()
+        .next()?
+        .ok()?
+        .value
+        .ok()
+        .and_then(|v| match v {
+            SampleValue::U32(t) => Some(t as i32),
+            _ => None,
+        })
 }
