@@ -1,0 +1,30 @@
+@import "tailwindcss";
+
+@theme {
+  --font-mono: "JetBrains Mono", "Fira Code", ui-monospace, monospace;
+  --font-sans: "Space Grotesk", "JetBrains Mono", ui-sans-serif, system-ui, sans-serif;
+
+  --color-panel: #101418;
+  --color-panel-deep: #0a0d10;
+  --color-edge: #1e262e;
+  --color-temp: #ff7a45;
+  --color-power: #ffc53d;
+  --color-util: #36cfc9;
+  --color-mem: #9254de;
+}
+
+body {
+  background:
+    radial-gradient(1100px 500px at 85% -10%, rgba(54, 207, 201, 0.07), transparent 60%),
+    radial-gradient(900px 420px at 10% -10%, rgba(255, 122, 69, 0.06), transparent 60%),
+    var(--color-panel-deep);
+  color: #dbe4ec;
+  font-family: var(--font-sans);
+  min-height: 100vh;
+}
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.reveal { animation: rise 0.5s ease-out both; }

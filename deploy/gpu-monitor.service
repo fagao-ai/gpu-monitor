@@ -1,0 +1,18 @@
+[Unit]
+Description=GPU Monitor (realtime NVIDIA web panel)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/gpu-monitor --port 8080 --interval 1000
+Restart=always
+RestartSec=3
+User=dev
+Group=dev
+# Harden a bit
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
