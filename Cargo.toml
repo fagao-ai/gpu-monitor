@@ -15,6 +15,7 @@ serde_json = "1"
 mime_guess = "2.0"
 tokio = { version = "1", features = ["full"] }
 tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tokio-util = "0.7"
 
 [profile.release]

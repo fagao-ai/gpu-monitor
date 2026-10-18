@@ -23,6 +23,10 @@ struct Args {
 
 fn main() -> anyhow::Result<()> {
     let args = Args::parse();
+    tracing_subscriber::fmt()
+        .with_writer(std::io::stderr)
+        .with_target(false)
+        .init();
     let rt = tokio::runtime::Runtime::new().context("failed to start tokio runtime")?;
     rt.block_on(server::run(args))
 }

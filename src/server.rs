@@ -24,19 +24,32 @@ struct Asset;
 #[derive(Clone)]
 struct AppState {
     tx: broadcast::Sender<String>,
-    /// Handle of the currently running sampler; replaced when a new viewer attaches.
-    sampler_gen: Arc<Mutex<CancellationToken>>,
+    /// Live viewer count + handle of the running sampler task.
+    viewers: Arc<Mutex<Viewers>>,
     nvml: Arc<Nvml>,
     interval: Duration,
 }
 
+#[derive(Default)]
+struct Viewers {
+    count: usize,
+    sampler: Option<CancellationToken>,
+}
+
 async fn ws_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> Response {
-    // Attachments start (or hand off to) the sampler task.
-    spawn_sampler(&state);
     ws.on_upgrade(move |socket| handle_socket(socket, state))
 }
 
 async fn handle_socket(socket: WebSocket, state: AppState) {
+    // Reference-counted sampler: start on first viewer, stop on last.
+    {
+        let mut v = state.viewers.lock().unwrap();
+        v.count += 1;
+        if v.sampler.is_none() {
+            v.sampler = Some(start_sampler(&state));
+        }
+    }
+
     let (mut sender, mut receiver) = socket.split();
     let mut rx = state.tx.subscribe();
 
@@ -50,6 +63,18 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
     // Receive side only exists to notice disconnects.
     while let Some(Ok(_)) = receiver.next().await {}
     send_task.abort();
+
+    let mut stop: Option<CancellationToken> = None;
+    {
+        let mut v = state.viewers.lock().unwrap();
+        v.count = v.count.saturating_sub(1);
+        if v.count == 0 {
+            stop = v.sampler.take();
+        }
+    }
+    if let Some(token) = stop {
+        token.cancel();
+    }
 }
 
 async fn embed_assets(uri: axum::http::Uri) -> Response {
@@ -60,27 +85,23 @@ async fn embed_assets(uri: axum::http::Uri) -> Response {
             let mime = mime_guess::from_path(path).first_or_octet_stream();
             ([(CONTENT_TYPE, mime.as_ref())], content.data).into_response()
         }
-        None => Html("<h1>frontend not built: run `npm run build` in frontend/</h1>")
-            .into_response(),
+        None => {
+            Html("<h1>frontend not built: run `npm run build` in frontend/</h1>").into_response()
+        }
     }
 }
 
-/// One sampler per viewer-generation: sleeps, samples, broadcasts.
-/// Stops when a newer sampler supersedes it.
-fn spawn_sampler(state: &AppState) {
+/// Starts the sampler task; caller stores its token and cancels it when the
+/// last viewer leaves. Errors reset per session (fresh viewer -> fresh count).
+fn start_sampler(state: &AppState) -> CancellationToken {
     let nvml = state.nvml.clone();
     let tx = state.tx.clone();
     let interval = state.interval;
-    let my_gen = CancellationToken::new();
-    let prev = {
-        let mut guard = state.sampler_gen.lock().unwrap();
-        std::mem::replace(&mut *guard, my_gen.clone())
-    };
-    prev.cancel();
+    let token = CancellationToken::new();
+    let my_gen = token.clone();
 
     tokio::spawn(async move {
         let mut errors: u64 = 0;
-        let _ = prev;
         loop {
             tokio::select! {
                 _ = tokio::time::sleep(interval) => {}
@@ -101,6 +122,7 @@ fn spawn_sampler(state: &AppState) {
             }
         }
     });
+    token
 }
 
 pub async fn run(args: Args) -> anyhow::Result<()> {
@@ -118,10 +140,9 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
         std::process::exit(1);
     }
 
-    // Sampler starts already cancelled: it only runs while viewers exist.
     let state = AppState {
         tx: broadcast::channel::<String>(64).0,
-        sampler_gen: Arc::new(Mutex::new(CancellationToken::new())),
+        viewers: Arc::new(Mutex::new(Viewers::default())),
         nvml: Arc::new(nvml),
         interval: Duration::from_millis(args.interval.max(250)),
     };

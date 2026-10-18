@@ -75,10 +75,7 @@ pub fn sample(nvml: &Nvml, errors: &mut u64) -> Vec<GpuInfo> {
             .memory_info()
             .map(|m| (m.used / 1024 / 1024, m.total / 1024 / 1024))
             .unwrap_or((0, 0));
-        let util = dev
-            .utilization_rates()
-            .map(|u| (u.gpu, u.memory))
-            .ok();
+        let util = dev.utilization_rates().map(|u| (u.gpu, u.memory)).ok();
         // Compute-type lookup; graphics-only processes are not covered in v1.
         let procs = match dev.running_compute_processes() {
             Ok(list) => list
@@ -98,6 +95,8 @@ pub fn sample(nvml: &Nvml, errors: &mut u64) -> Vec<GpuInfo> {
             index: i,
             name,
             temp_c: get(dev.temperature(TemperatureSensor::Gpu)).map(|t| t as i32),
+            // NOTE: HBM temperature needs NVML field values; nvml-wrapper 0.10
+            // does not expose it. Skipped for now (CMP cards lack it anyway).
             shutdown_temp_c: get(dev.temperature_threshold(TemperatureThreshold::Shutdown))
                 .map(|t| t as i32),
             util_gpu: util.map(|u| u.0),
@@ -106,10 +105,7 @@ pub fn sample(nvml: &Nvml, errors: &mut u64) -> Vec<GpuInfo> {
             mem_total_mb: mem.1,
             power_w: get(dev.power_usage()).map(|mw| mw as f32 / 1000.0),
             power_limit_w: get(dev.power_management_limit()).map(|mw| mw as f32 / 1000.0),
-            fan_speed_pct: dev
-                .fan_speed(0)
-                .ok()
-                .filter(|v| *v != u32::MAX),
+            fan_speed_pct: dev.fan_speed(0).ok().filter(|v| *v != u32::MAX),
             core_clock_mhz: get(dev.clock_info(Clock::Graphics)),
             mem_clock_mhz: get(dev.clock_info(Clock::Memory)),
             procs,
@@ -123,4 +119,55 @@ fn proc_name(pid: u32) -> String {
     std::fs::read_to_string(format!("/proc/{pid}/comm"))
         .map(|s| s.trim().to_string())
         .unwrap_or_default()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn snapshot_serializes_camel_case() {
+        let snap = Snapshot {
+            ts: 123,
+            error_count: 0,
+            gpus: vec![GpuInfo {
+                index: 0,
+                name: "test".into(),
+                temp_c: Some(42),
+                shutdown_temp_c: Some(98),
+                util_gpu: Some(10),
+                util_mem: Some(20),
+                mem_used_mb: 1,
+                mem_total_mb: 2,
+                power_w: Some(3.5),
+                power_limit_w: Some(250.0),
+                fan_speed_pct: None,
+                core_clock_mhz: Some(1000),
+                mem_clock_mhz: Some(2000),
+                procs: vec![GpuProcess {
+                    pid: 9,
+                    name: "x".into(),
+                    mem_used_mb: 5,
+                }],
+            }],
+        };
+        let json = serde_json::to_string(&snap).unwrap();
+        // Field names must match the frontend types.ts contract.
+        for key in [
+            "tempC",
+            "shutdownTempC",
+            "utilGpu",
+            "memUsedMb",
+            "powerW",
+            "powerLimitW",
+            "fanSpeedPct",
+            "coreClockMhz",
+            "memClockMhz",
+            "memUsedMb",
+            "errorCount",
+        ] {
+            assert!(json.contains(key), "missing {key} in {json}");
+        }
+        assert!(json.contains("\"fanSpeedPct\":null"));
+    }
 }
