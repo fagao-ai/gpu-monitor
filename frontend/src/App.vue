@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import GpuCard from './components/GpuCard.vue'
 import { useGpuStream } from './composables/useGpuStream'
 
-const WINDOW_SEC = 300
+// Default until the first snapshot tells us the server-configured window.
+const WINDOW_SEC = ref(300)
 const { snapshot, connected, series } = useGpuStream(WINDOW_SEC)
 
 const summary = computed(() => {

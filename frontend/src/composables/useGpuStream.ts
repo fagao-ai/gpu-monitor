@@ -8,7 +8,9 @@ export interface Series {
   util: (number | null)[]
 }
 
-export function useGpuStream(windowSec: number) {
+import type { Ref } from 'vue'
+
+export function useGpuStream(windowSec: Ref<number>) {
   const snapshot = ref<Snapshot | null>(null)
   const connected = ref(false)
   const series = ref<Map<number, Series>>(new Map())
@@ -23,7 +25,9 @@ export function useGpuStream(windowSec: number) {
     ws.onmessage = (ev) => {
       const snap = JSON.parse(ev.data) as Snapshot
       snapshot.value = snap
-      const cutoff = snap.ts - windowSec * 1000
+      // Adopt the server-advertised window (config: --window).
+      if (snap.windowSec > 0) windowSec.value = snap.windowSec
+      const cutoff = snap.ts - windowSec.value * 1000
       // Copy-on-write: new arrays/objects per frame so child watchers fire.
       const next = new Map(series.value)
       for (const gpu of snap.gpus) {

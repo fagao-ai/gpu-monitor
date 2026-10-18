@@ -24,6 +24,7 @@ export interface GpuInfo {
 
 export interface Snapshot {
   ts: number
+  windowSec: number
   errorCount: number
   gpus: GpuInfo[]
 }

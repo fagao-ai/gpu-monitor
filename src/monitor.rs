@@ -37,6 +37,8 @@ pub struct GpuInfo {
 #[serde(rename_all = "camelCase")]
 pub struct Snapshot {
     pub ts: u64,
+    /// Chart rolling-window size in seconds, decided by the server config.
+    pub window_sec: u64,
     pub error_count: u64,
     pub gpus: Vec<GpuInfo>,
 }
@@ -130,6 +132,7 @@ mod tests {
     fn snapshot_serializes_camel_case() {
         let snap = Snapshot {
             ts: 123,
+            window_sec: 300,
             error_count: 0,
             gpus: vec![GpuInfo {
                 index: 0,

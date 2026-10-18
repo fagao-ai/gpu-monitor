@@ -15,8 +15,7 @@ struct Args {
     #[arg(long, default_value_t = 1000)]
     interval: u64,
 
-    /// Rolling window size in seconds (accepted for parity with frontend;
-    /// the client keeps its own window)
+    /// Rolling window size in seconds, advertised to the frontend chart
     #[arg(long, default_value_t = 300)]
     window: u64,
 }

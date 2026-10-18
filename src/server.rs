@@ -24,6 +24,7 @@ struct Asset;
 #[derive(Clone)]
 struct AppState {
     tx: broadcast::Sender<String>,
+    window_sec: u64,
     /// Live viewer count + handle of the running sampler task.
     viewers: Arc<Mutex<Viewers>>,
     nvml: Arc<Nvml>,
@@ -97,6 +98,7 @@ fn start_sampler(state: &AppState) -> CancellationToken {
     let nvml = state.nvml.clone();
     let tx = state.tx.clone();
     let interval = state.interval;
+    let window_sec2 = state.window_sec;
     let token = CancellationToken::new();
     let my_gen = token.clone();
 
@@ -109,6 +111,7 @@ fn start_sampler(state: &AppState) -> CancellationToken {
             }
             let gpus = monitor::sample(&nvml, &mut errors);
             let snap = Snapshot {
+                window_sec: window_sec2,
                 ts: SystemTime::now()
                     .duration_since(UNIX_EPOCH)
                     .unwrap()
@@ -142,6 +145,7 @@ pub async fn run(args: Args) -> anyhow::Result<()> {
 
     let state = AppState {
         tx: broadcast::channel::<String>(64).0,
+        window_sec: args.window,
         viewers: Arc::new(Mutex::new(Viewers::default())),
         nvml: Arc::new(nvml),
         interval: Duration::from_millis(args.interval.max(250)),
