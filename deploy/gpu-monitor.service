@@ -8,8 +8,9 @@ Type=simple
 ExecStart=/usr/local/bin/gpu-monitor --port 8080 --interval 1000
 Restart=always
 RestartSec=3
-User=dev
-Group=dev
+# Deployment template: replace CHANGE_ME with the runtime user.
+User=CHANGE_ME
+Group=CHANGE_ME
 # Harden a bit
 NoNewPrivileges=true
 PrivateTmp=true
